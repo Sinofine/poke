@@ -1,0 +1,6 @@
+lvl = 5
+p = 0x4c02a9f86d97e84ef1e47ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+B = 10000
+Cfactor = 5
+use_cfactor = 0
+use_twist = 0

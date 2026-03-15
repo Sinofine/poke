@@ -1,0 +1,6 @@
+lvl = 3
+p = 0x1fa2a1cf67b5fb862ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+B = 100
+Cfactor = 5
+use_cfactor = 0
+use_twist = 0
