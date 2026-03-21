@@ -1,236 +1,128 @@
 #include "pokemon.h"
-#include <biextension.h>
-#include <ec.h>
-#include <endomorphism_action.h>
-#include <fips202.h>
-#include <hd.h>
-#include <id2iso.h>
 #include <intbig.h>
-#include <klpt.h>
+#include <fp2.h>
+#include <ec.h>
+#include <hd.h>
+#include <fips202.h>
 #include <quaternion.h>
-#include <rng.h>
 #include <torsion_constants.h>
+#include <endomorphism_action.h>
+#include <biextension.h>
+#include <rng.h>
+#include <klpt.h>
+#include <id2iso.h>
 
-int ibz_random_matrix(ibz_mat_2x2_t mat22, const ibz_t *modulus,
-                      shake256ctx *state) {
-  ibz_t gcd, det;
-  ibz_init(&gcd);
-  ibz_init(&det);
-  while (1) {
-    if (state != NULL) {
-      ibz_rand_interval_with_state(&mat22[0][0], &ibz_const_zero, modulus,
-                                   state);
-      ibz_rand_interval_with_state(&mat22[0][1], &ibz_const_zero, modulus,
-                                   state);
-      ibz_rand_interval_with_state(&mat22[1][0], &ibz_const_zero, modulus,
-                                   state);
-      ibz_rand_interval_with_state(&mat22[1][1], &ibz_const_zero, modulus,
-                                   state);
-    } else {
-      ibz_rand_interval(&mat22[0][0], &ibz_const_zero, modulus);
-      ibz_rand_interval(&mat22[0][1], &ibz_const_zero, modulus);
-      ibz_rand_interval(&mat22[1][0], &ibz_const_zero, modulus);
-      ibz_rand_interval(&mat22[1][1], &ibz_const_zero, modulus);
+
+int ibz_random_matrix(ibz_mat_2x2_t mat22, const ibz_t *modulus, shake256ctx *state) {
+    ibz_t gcd, det;
+    ibz_init(&gcd);
+    ibz_init(&det);
+    while (1) {
+        if (state != NULL) {
+            ibz_rand_interval_with_state(&mat22[0][0], &ibz_const_zero, modulus, state);
+            ibz_rand_interval_with_state(&mat22[0][1], &ibz_const_zero, modulus, state);
+            ibz_rand_interval_with_state(&mat22[1][0], &ibz_const_zero, modulus, state);
+            ibz_rand_interval_with_state(&mat22[1][1], &ibz_const_zero, modulus, state);
+        } else {
+            ibz_rand_interval(&mat22[0][0], &ibz_const_zero, modulus);
+            ibz_rand_interval(&mat22[0][1], &ibz_const_zero, modulus);
+            ibz_rand_interval(&mat22[1][0], &ibz_const_zero, modulus);
+            ibz_rand_interval(&mat22[1][1], &ibz_const_zero, modulus);
+        }
+        ibz_mul(&det, &mat22[0][0], &mat22[1][1]);
+        ibz_mul(&gcd, &mat22[0][1], &mat22[1][0]);
+        ibz_sub(&det, &det, &gcd);
+        ibz_gcd(&gcd, &det, modulus);
+        if (ibz_is_one(&gcd)) {
+            break;
+        }
     }
-    ibz_mul(&det, &mat22[0][0], &mat22[1][1]);
-    ibz_mul(&gcd, &mat22[0][1], &mat22[1][0]);
-    ibz_sub(&det, &det, &gcd);
-    ibz_gcd(&gcd, &det, modulus);
-    if (ibz_is_one(&gcd)) {
-      break;
-    }
-  }
-  ibz_finalize(&gcd);
-  ibz_finalize(&det);
-  return 1;
+    ibz_finalize(&gcd);
+    ibz_finalize(&det);
+    return 1;
 }
 
 int ibz_random_unit(ibz_t *q, const ibz_t *modulus, shake256ctx *state) {
-  ibz_t gcd;
-  ibz_init(&gcd);
-  while (1) {
-    if (state != NULL) {
-      ibz_rand_interval_with_state(q, &ibz_const_zero, modulus, state);
-    } else {
-      ibz_rand_interval(q, &ibz_const_zero, modulus);
+    ibz_t gcd;
+    ibz_init(&gcd);
+    while (1) {
+        if (state != NULL) {
+            ibz_rand_interval_with_state(q, &ibz_const_zero, modulus, state);
+        } else {
+            ibz_rand_interval(q, &ibz_const_zero, modulus);
+        }
+        ibz_gcd(&gcd, q, modulus);
+        if (ibz_is_one(&gcd)) {
+            break;
+        }
     }
-    ibz_gcd(&gcd, q, modulus);
-    if (ibz_is_one(&gcd)) {
-      break;
-    }
-  }
-  ibz_finalize(&gcd);
-  return 1;
-}
-
-int eval_dimtwo_isog(theta_chain_t *phi, ibz_t *q, ec_basis_t *evalPQ,
-                     ec_basis_t *PQ, theta_couple_curve_t *E01, bool is_five) {
-  theta_couple_point_t output_points, input_points;
-  ec_point_t imP, imQ, imPQ, imR, imS, imRS;
-
-  input_points.P1 = PQ->P;
-  ec_set_zero(&input_points.P2);
-  theta_chain_eval_special_case(&output_points, phi, &input_points, E01);
-  copy_point(&imP, &output_points.P1);
-
-  input_points.P1 = PQ->Q;
-  ec_set_zero(&input_points.P2);
-  theta_chain_eval_special_case(&output_points, phi, &input_points, E01);
-  copy_point(&imQ, &output_points.P1);
-
-  input_points.P1 = PQ->PmQ;
-  ec_set_zero(&input_points.P2);
-  theta_chain_eval_special_case(&output_points, phi, &input_points, E01);
-  copy_point(&imPQ, &output_points.P1);
-
-  ec_basis_t RS;
-  if (is_five)
-    ec_curve_to_basis_5(&RS, &E01->E2);
-  else
-    ec_curve_to_basis_35(&RS, &E01->E2);
-
-  input_points.P2 = RS.P;
-  ec_set_zero(&input_points.P1);
-  theta_chain_eval_special_case(&output_points, phi, &input_points, E01);
-  copy_point(&imR, &output_points.P1);
-
-  input_points.P2 = RS.Q;
-  ec_set_zero(&input_points.P1);
-  theta_chain_eval_special_case(&output_points, phi, &input_points, E01);
-  copy_point(&imS, &output_points.P1);
-
-  input_points.P2 = RS.PmQ;
-  ec_set_zero(&input_points.P1);
-  theta_chain_eval_special_case(&output_points, phi, &input_points, E01);
-  copy_point(&imRS, &output_points.P1);
-
-  ec_basis_t imRS_basis;
-  ec_basis_t imPQ_basis;
-  imRS_basis.P = imR;
-  imRS_basis.Q = imS;
-  imRS_basis.PmQ = imRS;
-
-  imPQ_basis.P = imP;
-  imPQ_basis.Q = imQ;
-  imPQ_basis.PmQ = imPQ;
-
-  digit_t x1[NWORDS_ORDER] = {0}, x2[NWORDS_ORDER] = {0};
-  digit_t x3[NWORDS_ORDER] = {0}, x4[NWORDS_ORDER] = {0};
-  digit_t x5[NWORDS_ORDER] = {0}, x6[NWORDS_ORDER] = {0};
-  digit_t t[NWORDS_ORDER] = {0};
-
-  if (is_five) {
-    const int nwords = (TORSION_CPOWER_BYTES * 8 + RADIX) / RADIX;
-    ec_dlog_tate_5(&x1, &x2, &x3, &x4, &imRS_basis, &imPQ_basis,
-                   &phi->codomain.E1);
-    ec_biscalar_mul_bounded(&evalPQ->P, &E01->E2, x1, x2, &RS,
-                            TORSION_CPOWER_BYTES * 8);
-    ec_biscalar_mul_bounded(&evalPQ->Q, &E01->E2, x3, x4, &RS,
-                            TORSION_CPOWER_BYTES * 8);
-    mp_add(x5, x1, FIVEpF, nwords);
-    mp_sub(t, x5, x3, nwords);
-    if (mp_compare(t, FIVEpF, nwords) != -1) {
-      mp_sub(x5, t, FIVEpF, nwords);
-    } else {
-      memcpy(x5, t, NWORDS_ORDER * RADIX / 8);
-    }
-
-    mp_add(x6, x2, FIVEpF, nwords);
-    mp_sub(t, x6, x4, nwords);
-    if (mp_compare(t, FIVEpF, nwords) != -1) {
-      mp_sub(x6, t, FIVEpF, nwords);
-    } else {
-      memcpy(x6, t, NWORDS_ORDER * RADIX / 8);
-    }
-    ec_biscalar_mul_bounded(&evalPQ->PmQ, &E01->E2, x5, x6, &RS,
-                            TORSION_CPOWER_BYTES * 8);
-
-  } else {
-    const int nwords = (TORSION_3CPOWER_BYTES * 8 + RADIX) / RADIX;
-    ec_dlog_tate_35(&x1, &x2, &x3, &x4, &imRS_basis, &imPQ_basis,
-                    &phi->codomain.E1);
-    ec_biscalar_mul_bounded(&evalPQ->P, &E01->E2, x1, x2, &RS,
-                            TORSION_3CPOWER_BYTES * 8);
-    ec_biscalar_mul_bounded(&evalPQ->Q, &E01->E2, x3, x4, &RS,
-                            TORSION_3CPOWER_BYTES * 8);
-    mp_add(x5, x1, THREE_FIVE_pF, nwords);
-    mp_sub(t, x5, x3, nwords);
-
-    if (mp_compare(t, THREE_FIVE_pF, nwords) != -1) {
-      mp_sub(x5, t, THREE_FIVE_pF, nwords);
-    } else {
-      memcpy(x5, t, NWORDS_ORDER * RADIX / 8);
-    }
-
-    mp_add(x6, x2, THREE_FIVE_pF, nwords);
-    mp_sub(t, x6, x4, nwords);
-    if (mp_compare(t, THREE_FIVE_pF, nwords) != -1) {
-      mp_sub(x6, t, THREE_FIVE_pF, nwords);
-    } else {
-      memcpy(x6, t, NWORDS_ORDER * RADIX / 8);
-    }
-
-    ec_biscalar_mul_bounded(&evalPQ->PmQ, &E01->E2, x5, x6, &RS,
-                            TORSION_3CPOWER_BYTES * 8);
-  }
-
-  return 1;
+    ibz_finalize(&gcd);
+    return 1;
 }
 
 int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
-  ibz_t q, alpha, beta, gamma, delta, rhs, deg;
-  ibz_t A, q_bound;
+  ibz_t q, alpha, beta, rhs, deg;
+  ibz_t A, two_to_a, tempx, tempy;
   ec_point_t pointT;
 
   ibz_init(&q);
   ibz_init(&alpha);
   ibz_init(&beta);
-  ibz_init(&gamma);
-  ibz_init(&delta);
   ibz_init(&rhs);
   ibz_init(&deg);
   ibz_init(&A);
-  ibz_init(&q_bound);
-  ibz_div_2exp(&A, &TORSION_PLUS_2POWER, 2);
-  ibz_div_2exp(&q_bound, &TORSION_PLUS_2POWER, 4);
-  // Set q to a random value in the range [0, TORSION_PLUS_2POWER)
+  ibz_init(&two_to_a);
+  ibz_init(&tempx);
+  ibz_init(&tempy);
+
+  ibz_copy(&A, &TORSION_PLUS_2POWER);
+  ibz_div_2exp(&two_to_a, &A, TORSION_PLUS_EVEN_POWER / 2);
+
   for (int i = 0; i < 1000; i++) {
-    ibz_rand_interval(&q, &ibz_const_zero, &q_bound);
-    ibz_sub(&deg, &A, &q);
-    if (ibz_divides(&q, &ibz_const_two) == 0 &&
-        ibz_divides(&q, &ibz_const_three) == 0 &&
-        ibz_divides(&q, &ibz_const_five) == 0 &&
-        ibz_divides(&deg, &ibz_const_three) == 0 &&
-        ibz_divides(&deg, &ibz_const_five) == 0) {
-      break;
+    ibz_t x_bound, y_bound;
+    ibz_init(&x_bound);
+    ibz_init(&y_bound);
+    ibz_sqrt(&x_bound, &two_to_a);
+    ibz_rand_interval(&tempx, &ibz_const_zero, &x_bound);
+    ibz_mul(&rhs, &tempx, &tempx);
+    ibz_sub(&y_bound, &two_to_a, &rhs);
+    if (ibz_cmp(&y_bound, &ibz_const_zero) > 0) {
+      ibz_sqrt(&y_bound, &y_bound);
+      ibz_rand_interval(&tempy, &ibz_const_zero, &y_bound);
+      ibz_mul(&rhs, &tempy, &tempy);
+      ibz_mul(&deg, &tempx, &tempx);
+      ibz_add(&deg, &deg, &rhs);
+      ibz_sub(&q, &two_to_a, &deg);
+      if (ibz_cmp(&q, &ibz_const_zero) > 0 &&
+          ibz_divides(&q, &ibz_const_three) == 0) {
+        ibz_finalize(&x_bound);
+        ibz_finalize(&y_bound);
+        break;
+      }
     }
+    ibz_finalize(&x_bound);
+    ibz_finalize(&y_bound);
   }
+
+  ibz_sub(&deg, &A, &q);
   ibz_mul(&rhs, &deg, &q);
   ibz_mul(&rhs, &rhs, &TORSION_PLUS_3POWER);
-  ibz_random_unit(&alpha, &A, NULL);
-  ibz_random_unit(&beta, &A, NULL);
-  ibz_random_unit(&gamma, &TORSION_PLUS_3POWER, NULL);
-  ibz_random_unit(&delta, &TORSION_PLUS_CPOWER, NULL);
 
-  memset(&sk->deg, 0, NWORDS_ORDER * RADIX / 8);
-  memset(&sk->alpha, 0, NWORDS_ORDER * RADIX / 8);
-  memset(&sk->beta, 0, NWORDS_ORDER * RADIX / 8);
-  memset(&sk->delta, 0, NWORDS_ORDER * RADIX / 8);
+  ibz_random_unit(&alpha, &A, NULL);
+  ibz_random_unit(&beta, &TORSION_PLUS_3POWER, NULL);
 
   ibz_to_digits(sk->deg, &q);
   ibz_to_digits(sk->alpha, &alpha);
   ibz_to_digits(sk->beta, &beta);
-  ibz_to_digits(sk->delta, &delta);
+  ibz_to_digits(sk->tempx, &tempx);
+  ibz_to_digits(sk->tempy, &tempy);
 
   ec_curve_t curve = CURVE_E0;
-
   quat_alg_elem_t tau;
   quat_alg_elem_init(&tau);
-  if (represent_integer(&tau, &rhs, &QUATALG_PINFTY) == 0) {
-    printf("Failed to represent integer in non-diagonal form\n");
-    return 1;
-  }
-  ec_basis_t E0_two, E0_three, E0_five;
+  represent_integer(&tau, &rhs, &QUATALG_PINFTY);
+  
+  ec_basis_t E0_two, E0_three;
   copy_point(&E0_two.P, &BASIS_EVEN.P);
   copy_point(&E0_two.Q, &BASIS_EVEN.Q);
   copy_point(&E0_two.PmQ, &BASIS_EVEN.PmQ);
@@ -238,57 +130,33 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   copy_point(&E0_three.Q, &BASIS_THREE.Q);
   copy_point(&E0_three.PmQ, &BASIS_THREE.PmQ);
 
-  endomorphism_application_three_basis(&E0_three, &curve, &tau, POWER_OF_3);
-  endomorphism_application_even_basis(&E0_two, &curve, &tau, POWER_OF_2);
+  endomorphism_application_three_basis(&E0_three, &curve, &tau, TORSION_PLUS_ODD_POWERS[0]);
+  endomorphism_application_even_basis(&E0_two, &curve, &tau, TORSION_PLUS_EVEN_POWER);
   quat_alg_elem_finalize(&tau);
 
-  ec_point_t kernel_point;
   ec_isog_odd_t isog;
   isog.curve = curve;
-
   ibz_t three_m1_order, remainder;
   ibz_init(&three_m1_order);
   ibz_init(&remainder);
   ibz_div(&three_m1_order, &remainder, &TORSION_PLUS_3POWER, &ibz_const_three);
+  
   ec_point_t test_point;
   ec_mul_ibz(&test_point, &curve, &three_m1_order, &E0_three.P);
   if (ec_is_zero(&test_point)) {
-    ec_mul_ibz(&test_point, &curve, &three_m1_order, &E0_three.Q);
-    if (ec_is_zero(&test_point)) {
-      printf("invalid 3^b-torsion points\n");
-      return 1;
-    }
     copy_point(&isog.ker_plus, &E0_three.Q);
   } else {
-    ec_mul_ibz(&test_point, &curve, &three_m1_order, &E0_three.P);
-    if (ec_is_zero(&test_point)) {
-      printf("invalid 3^b-torsion points\n");
-      return 1;
-    }
     copy_point(&isog.ker_plus, &E0_three.P);
   }
-
   ec_set_zero(&isog.ker_minus);
+  isog.degree[0] = TORSION_PLUS_ODD_POWERS[0];
 
-  ec_mul_ibz(&test_point, &curve, &three_m1_order, &isog.ker_plus);
-  if (ec_is_zero(&test_point)) {
-    printf("the order of the kernel point is not 3^m\n");
-    return 1;
-  }
-
-  isog.degree[0] = POWER_OF_3;
-  for (int i = 1; i < P_LEN + M_LEN; i++) {
-    isog.degree[i] = 0;
-  }
   ec_curve_t E1;
-
   ec_eval_three(&E1, &isog, (ec_point_t *)&E0_two, 3);
 
-  // Evaluating the theta-based 2-dim isogeny
   theta_couple_curve_t E01;
   theta_couple_point_t T1, T2, T1m2;
   theta_chain_t hd_isog;
-
   E01.E1 = curve;
   E01.E2 = E1;
 
@@ -302,7 +170,6 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   ibz_t inverse;
   ibz_init(&inverse);
   ibz_invmod(&inverse, &TORSION_PLUS_3POWER, &TORSION_PLUS_2POWER);
-
   ec_mul_ibz(&E0_two.P, &E1, &inverse, &E0_two.P);
   ec_mul_ibz(&E0_two.Q, &E1, &inverse, &E0_two.Q);
   ec_mul_ibz(&E0_two.PmQ, &E1, &inverse, &E0_two.PmQ);
@@ -311,249 +178,196 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   T2.P2 = E0_two.Q;
   T1m2.P2 = E0_two.PmQ;
 
-  theta_chain_comput_strategy(&hd_isog, POWER_OF_2 - 2, &E01, &T1, &T2, &T1m2,
-                              strategies[2], 1);
+  theta_chain_comput_strategy(&hd_isog, TORSION_PLUS_EVEN_POWER - 2, &E01, &T1, &T2, &T1m2, strategies[2], 1);
 
-  // Point evaluation via 2-dim isogeny
-  jac_point_t P, Q, R, S, X, Y, T;
-  ec_basis_t tmp_basis;
-  copy_point(&tmp_basis.P, &E0_two.P);
-  copy_point(&tmp_basis.Q, &E0_two.Q);
-  copy_point(&tmp_basis.PmQ, &E0_two.PmQ);
+  theta_couple_point_t P0_out, Q0_out, PmQ0_out;
+  P0_out.P1 = BASIS_EVEN.P;
+  ec_set_zero(&P0_out.P2);
+  Q0_out.P1 = BASIS_EVEN.Q;
+  ec_set_zero(&Q0_out.P2);
+  PmQ0_out.P1 = BASIS_EVEN.PmQ;
+  ec_set_zero(&PmQ0_out.P2);
+  theta_chain_eval_special_case(&P0_out, &hd_isog, &P0_out, &E01);
+  theta_chain_eval_special_case(&Q0_out, &hd_isog, &Q0_out, &E01);
+  theta_chain_eval_special_case(&PmQ0_out, &hd_isog, &PmQ0_out, &E01);
 
-  copy_point(&E0_three.P, &BASIS_THREE.P);
-  copy_point(&E0_three.Q, &BASIS_THREE.Q);
-  copy_point(&E0_three.PmQ, &BASIS_THREE.PmQ);
-  copy_point(&E0_five.P, &BASIS_C.P);
-  copy_point(&E0_five.Q, &BASIS_C.Q);
-  copy_point(&E0_five.PmQ, &BASIS_C.PmQ);
+  fp2_t e_P0Q0, e_P2Q2, e_P3Q3, target_pairing;
+  fp2_init(&e_P0Q0); fp2_init(&e_P2Q2); fp2_init(&e_P3Q3); fp2_init(&target_pairing);
+  
+  ec_basis_t B_E2, B_E3;
+  B_E2.P = P0_out.P1; B_E2.Q = Q0_out.P1; B_E2.PmQ = PmQ0_out.P1;
+  B_E3.P = P0_out.P2; B_E3.Q = Q0_out.P2; B_E3.PmQ = PmQ0_out.P2;
 
-  // lift_basis(&P, &Q, &E0_two, &curve);
-  lift_basis(&R, &S, &E0_three, &curve);
-  lift_basis(&X, &Y, &E0_five, &curve);
+  ec_weil_pairing_p_ibz(&e_P0Q0, &BASIS_EVEN, &TORSION_PLUS_2POWER);
+  fp2_pow(&target_pairing, &e_P0Q0, &q);
+  ec_weil_pairing_p_ibz(&e_P2Q2, &B_E2, &TORSION_PLUS_2POWER);
+  
+  int use_E2 = 0;
+  if (fp2_is_equal(&e_P2Q2, &target_pairing)) {
+    pk->EA = hd_isog.codomain.E1;
+    use_E2 = 1;
+  } else {
+    ec_weil_pairing_p_ibz(&e_P3Q3, &B_E3, &TORSION_PLUS_2POWER);
+    if (fp2_is_equal(&e_P3Q3, &target_pairing)) {
+      pk->EA = hd_isog.codomain.E2;
+      use_E2 = 0;
+    } else {
+      // Finalize all ibz_t variables on failure
+      ibz_finalize(&q); ibz_finalize(&alpha); ibz_finalize(&beta); ibz_finalize(&rhs);
+      ibz_finalize(&deg); ibz_finalize(&A); ibz_finalize(&two_to_a); ibz_finalize(&tempx);
+      ibz_finalize(&tempy); ibz_finalize(&three_m1_order); ibz_finalize(&remainder);
+      ibz_finalize(&inverse);
+      fp2_finalize(&e_P0Q0); fp2_finalize(&e_P2Q2); fp2_finalize(&e_P3Q3); fp2_finalize(&target_pairing);
+      return 1;
+    }
+  }
+  fp2_finalize(&e_P0Q0); fp2_finalize(&e_P2Q2); fp2_finalize(&e_P3Q3); fp2_finalize(&target_pairing);
 
-  // P23x = R + X and Q23x = S + Y
+  jac_point_t P, Q, R, S, T;
+  lift_basis(&P, &Q, (ec_basis_t *)&BASIS_EVEN, &curve);
+  lift_basis(&R, &S, (ec_basis_t *)&BASIS_THREE, &curve);
+
   jac_point_t P23x, Q23x, PmQ23x;
-  ADD(&P23x, &R, &X, &curve);
-  ADD(&Q23x, &S, &Y, &curve);
+  ADD(&P23x, &P, &R, &curve);
+  ADD(&Q23x, &Q, &S, &curve);
   jac_neg(&T, &Q23x);
   ADD(&PmQ23x, &P23x, &T, &curve);
 
-  ec_basis_t eval_points, imPQ23x;
+  ec_basis_t eval_points;
   jac_to_xz(&eval_points.P, &P23x);
   jac_to_xz(&eval_points.Q, &Q23x);
   jac_to_xz(&eval_points.PmQ, &PmQ23x);
 
-  eval_dimtwo_isog(&hd_isog, &deg, &imPQ23x, &eval_points, &E01, false);
+  theta_couple_point_t combined_out;
+  ec_basis_t imPQ23x;
+  combined_out.P1 = eval_points.P; ec_set_zero(&combined_out.P2);
+  theta_chain_eval_special_case(&combined_out, &hd_isog, &combined_out, &E01);
+  imPQ23x.P = use_E2 ? combined_out.P1 : combined_out.P2;
+  combined_out.P1 = eval_points.Q; ec_set_zero(&combined_out.P2);
+  theta_chain_eval_special_case(&combined_out, &hd_isog, &combined_out, &E01);
+  imPQ23x.Q = use_E2 ? combined_out.P1 : combined_out.P2;
+  combined_out.P1 = eval_points.PmQ; ec_set_zero(&combined_out.P2);
+  theta_chain_eval_special_case(&combined_out, &hd_isog, &combined_out, &E01);
+  imPQ23x.PmQ = use_E2 ? combined_out.P1 : combined_out.P2;
 
-  ibz_t cofactor;
-  // Compute X_A, Y_B
-  ibz_init(&cofactor);
-  ibz_invmod(&cofactor, &TORSION_PLUS_23POWER, &TORSION_PLUS_CPOWER);
-  ibz_mul(&cofactor, &cofactor, &TORSION_PLUS_23POWER);
-  ec_mul_ibz(&pk->PQxy.P, &E01.E2, &cofactor, &imPQ23x.P);
-  ec_mul_ibz(&pk->PQxy.P, &E01.E2, &delta, &pk->PQxy.P);
-  ec_mul_ibz(&pk->PQxy.Q, &E01.E2, &cofactor, &imPQ23x.Q);
-  ec_mul_ibz(&pk->PQxy.Q, &E01.E2, &delta, &pk->PQxy.Q);
-  ec_mul_ibz(&pk->PQxy.PmQ, &E01.E2, &cofactor, &imPQ23x.PmQ);
-  ec_mul_ibz(&pk->PQxy.PmQ, &E01.E2, &delta, &pk->PQxy.PmQ);
+  ibz_t inv_3b, inv_2a;
+  ibz_init(&inv_3b);
+  ibz_init(&inv_2a);
+  ibz_invmod(&inv_3b, &TORSION_PLUS_3POWER, &TORSION_PLUS_2POWER);
+  ibz_invmod(&inv_2a, &TORSION_PLUS_2POWER, &TORSION_PLUS_3POWER);
 
-  // Compute P2, Q2
-  ec_mul(&pk->PQ2.P, &E01.E2, sk->alpha, &tmp_basis.P);
-  ec_mul(&pk->PQ2.Q, &E01.E2, sk->beta, &tmp_basis.Q);
-  xADD(&tmp_basis.PmQ, &tmp_basis.P, &tmp_basis.Q, &tmp_basis.PmQ);
-  ec_biscalar_mul_bounded(&pk->PQ2.PmQ, &E01.E2, sk->alpha, sk->beta,
-                          &tmp_basis, TORSION_2POWER_BYTES * 8);
+  ec_mul_ibz(&pointT, &pk->EA, &TORSION_PLUS_3POWER, &imPQ23x.P);
+  ibz_mul(&rhs, &alpha, &inv_3b);
+  ibz_mod(&rhs, &rhs, &A);
+  ec_mul_ibz(&pk->PQA.P, &pk->EA, &rhs, &pointT);
+  ec_mul_ibz(&pointT, &pk->EA, &TORSION_PLUS_3POWER, &imPQ23x.Q);
+  ec_mul_ibz(&pk->PQA.Q, &pk->EA, &rhs, &pointT);
+  ec_mul_ibz(&pointT, &pk->EA, &TORSION_PLUS_3POWER, &imPQ23x.PmQ);
+  ec_mul_ibz(&pk->PQA.PmQ, &pk->EA, &rhs, &pointT);
 
-  // Compute P3, Q3
-  ibz_invmod(&cofactor, &TORSION_PLUS_2CPOWER, &TORSION_PLUS_3POWER);
-  ibz_mul(&cofactor, &cofactor, &TORSION_PLUS_2CPOWER);
-  ec_mul_ibz(&pk->PQ3.P, &E01.E2, &cofactor, &imPQ23x.P);
-  ec_mul_ibz(&pk->PQ3.P, &E01.E2, &gamma, &pk->PQ3.P);
-  ec_mul_ibz(&pk->PQ3.Q, &E01.E2, &cofactor, &imPQ23x.Q);
-  ec_mul_ibz(&pk->PQ3.Q, &E01.E2, &gamma, &pk->PQ3.Q);
-  ec_mul_ibz(&pk->PQ3.PmQ, &E01.E2, &cofactor, &imPQ23x.PmQ);
-  ec_mul_ibz(&pk->PQ3.PmQ, &E01.E2, &gamma, &pk->PQ3.PmQ);
+  ec_mul_ibz(&pointT, &pk->EA, &TORSION_PLUS_2POWER, &imPQ23x.P);
+  ibz_mul(&rhs, &beta, &inv_2a);
+  ibz_mod(&rhs, &rhs, &TORSION_PLUS_3POWER);
+  ec_mul_ibz(&pk->RSA.P, &pk->EA, &rhs, &pointT);
+  ec_mul_ibz(&pointT, &pk->EA, &TORSION_PLUS_2POWER, &imPQ23x.Q);
+  ec_mul_ibz(&pk->RSA.Q, &pk->EA, &rhs, &pointT);
+  ec_mul_ibz(&pointT, &pk->EA, &TORSION_PLUS_2POWER, &imPQ23x.PmQ);
+  ec_mul_ibz(&pk->RSA.PmQ, &pk->EA, &rhs, &pointT);
 
-  pk->EA = E01.E2;
-
-  ibz_finalize(&three_m1_order);
-  ibz_finalize(&cofactor);
-  ibz_finalize(&remainder);
-  ibz_finalize(&inverse);
-  ibz_finalize(&q);
-  ibz_finalize(&alpha);
-  ibz_finalize(&beta);
-  ibz_finalize(&delta);
-  ibz_finalize(&gamma);
-  ibz_finalize(&rhs);
-  ibz_finalize(&deg);
-  ibz_finalize(&A);
-  ibz_finalize(&q_bound);
-  return 1;
+  ibz_finalize(&q); ibz_finalize(&alpha); ibz_finalize(&beta); ibz_finalize(&rhs);
+  ibz_finalize(&deg); ibz_finalize(&A); ibz_finalize(&two_to_a); ibz_finalize(&tempx);
+  ibz_finalize(&tempy); ibz_finalize(&three_m1_order); ibz_finalize(&remainder);
+  ibz_finalize(&inverse); ibz_finalize(&inv_3b); ibz_finalize(&inv_2a);
+  return 0;
 }
 
 int encrypt(pokemon_ct_t *ct, const pokemon_pk_t *pk, const unsigned char *m,
             const size_t m_len, const unsigned char *seed,
             const size_t seed_len) {
   ibz_mat_2x2_t mask_xy;
-  ec_isog_odd_t isogB, isogB_prime;
-  ibz_t beta, omega, omega_inv, TT, A;
+  ec_isog_even_t psi, psi_prime;
+  ibz_t s, gamma, A;
   ec_curve_t EB, EAB;
-  ec_basis_t E0_two, E0_xy, EA_two, EA_xy, EAB_xy, eval_basis[2];
-  ec_point_t pointT;
+  ec_basis_t eval_basis_B[2], eval_basis_AB[2];
   shake256ctx state;
 
-  digit_t beta_scalar[NWORDS_ORDER] = {0}, omega_scalar[NWORDS_ORDER] = {0},
-          omega_inv_scalar[NWORDS_ORDER] = {0}, one_scalar[NWORDS_ORDER] = {1};
-  digit_t mask_xy_scalar[6][NWORDS_ORDER] = {0};
+  digit_t s_scalar[NWORDS_ORDER] = {0};
+  digit_t gamma_scalar[NWORDS_ORDER] = {0};
+  digit_t one_scalar[NWORDS_ORDER] = {1};
 
-  ibz_init(&beta);
-  ibz_init(&omega);
-  ibz_init(&omega_inv);
-  ibz_init(&TT);
+  ibz_init(&s);
+  ibz_init(&gamma);
   ibz_init(&A);
-  ibz_mat_2x2_init(&mask_xy);
+  ibz_copy(&A, &TORSION_PLUS_2POWER);
 
-  ibz_div_2exp(&A, &TORSION_PLUS_2POWER, 2);
   if (seed != NULL) {
     shake256_absorb(&state, seed, seed_len);
-    ibz_random_unit(&beta, &TORSION_PLUS_3POWER, &state);
-    ibz_random_unit(&omega, &A, &state);
-    ibz_random_matrix(mask_xy, &TORSION_PLUS_CPOWER, &state);
+    ibz_rand_interval_with_state(&s, &ibz_const_zero, &A, &state);
+    ibz_random_unit(&gamma, &A, &state);
+    ibz_random_matrix(mask_xy, &TORSION_PLUS_3POWER, &state);
     shake256_ctx_release(&state);
   } else {
-    ibz_random_unit(&beta, &TORSION_PLUS_3POWER, NULL);
-    ibz_random_unit(&omega, &A, NULL);
-    ibz_random_matrix(mask_xy, &TORSION_PLUS_CPOWER, NULL);
+    ibz_rand_interval(&s, &ibz_const_zero, &A);
+    ibz_random_unit(&gamma, &A, NULL);
+    ibz_random_matrix(mask_xy, &TORSION_PLUS_3POWER, NULL);
   }
-  ibz_invmod(&omega_inv, &omega, &A);
-  ibz_to_digits(omega_scalar, &omega);
-  ibz_to_digits(omega_inv_scalar, &omega_inv);
-  ibz_to_digits(beta_scalar, &beta);
 
-  for (int i = 0; i < 4; i++) {
-    ibz_to_digits(mask_xy_scalar[i], &mask_xy[i / 2][i % 2]);
-  }
-  ibz_sub(&TT, &mask_xy[0][0], &mask_xy[1][0]);
-  ibz_mod(&TT, &TT, &TORSION_PLUS_CPOWER);
-  ibz_to_digits(mask_xy_scalar[4], &TT);
-  ibz_sub(&TT, &mask_xy[0][1], &mask_xy[1][1]);
-  ibz_mod(&TT, &TT, &TORSION_PLUS_CPOWER);
-  ibz_to_digits(mask_xy_scalar[5], &TT);
+  ibz_to_digits(s_scalar, &s);
+  ibz_to_digits(gamma_scalar, &gamma);
 
-  copy_point(&E0_two.P, &BASIS_EVEN.P);
-  copy_point(&E0_two.Q, &BASIS_EVEN.Q);
-  copy_point(&E0_two.PmQ, &BASIS_EVEN.PmQ);
-  copy_point(&E0_xy.P, &BASIS_C.P);
-  copy_point(&E0_xy.Q, &BASIS_C.Q);
-  copy_point(&E0_xy.PmQ, &BASIS_C.PmQ);
-  copy_point(&EA_two.P, &pk->PQ2.P);
-  copy_point(&EA_two.Q, &pk->PQ2.Q);
-  copy_point(&EA_two.PmQ, &pk->PQ2.PmQ);
-  copy_point(&EA_xy.P, &pk->PQxy.P);
-  copy_point(&EA_xy.Q, &pk->PQxy.Q);
-  copy_point(&EA_xy.PmQ, &pk->PQxy.PmQ);
+  psi.curve = CURVE_E0;
+  psi.length = TORSION_PLUS_EVEN_POWER;
+  ec_biscalar_mul_bounded(&psi.kernel, &psi.curve, one_scalar, s_scalar, (ec_basis_t *)&BASIS_EVEN, TORSION_2POWER_BYTES * 8);
 
-  // Compute the isogeny E0 -> EB
-  isogB.curve = CURVE_E0;
-  isogB.degree[0] = POWER_OF_3;
-  for (int i = 1; i < P_LEN + M_LEN; i++) {
-    isogB.degree[i] = 0;
-  }
-  ec_set_zero(&isogB.ker_minus);
-  // kernel = P + beta * Q
-  ec_biscalar_mul_bounded(&isogB.ker_plus, &isogB.curve, one_scalar,
-                          beta_scalar, &BASIS_THREE, TORSION_3POWER_BYTES * 8);
-
-  eval_basis[0] = E0_two;
-  eval_basis[1] = E0_xy;
-  ec_eval_three(&EB, &isogB, (ec_point_t *)eval_basis, 6);
-  E0_two = eval_basis[0];
-  E0_xy = eval_basis[1];
-
+  eval_basis_B[0] = BASIS_EVEN;
+  eval_basis_B[1] = BASIS_THREE;
+  ec_eval_even(&EB, &psi, (ec_point_t *)eval_basis_B, 6);
   ct->EB = EB;
 
-  // Masking evaluated basis points
-  xMUL(&ct->PQ2_B.P, &E0_two.P, omega_scalar, &EB);
-  xMUL(&ct->PQ2_B.Q, &E0_two.Q, omega_inv_scalar, &EB);
-  xADD(&E0_two.PmQ, &E0_two.P, &E0_two.Q, &E0_two.PmQ);
-  ec_biscalar_mul_bounded(&ct->PQ2_B.PmQ, &EB, omega_scalar, omega_inv_scalar,
-                          &E0_two, TORSION_2POWER_BYTES * 8);
+  psi_prime.curve = pk->EA;
+  psi_prime.length = TORSION_PLUS_EVEN_POWER;
+  ec_biscalar_mul_bounded(&psi_prime.kernel, &psi_prime.curve, one_scalar, s_scalar, &pk->PQA, TORSION_2POWER_BYTES * 8);
 
-  ec_biscalar_mul_bounded(&ct->PQxy_B.P, &EB, mask_xy_scalar[0],
-                          mask_xy_scalar[1], &E0_xy, TORSION_2POWER_BYTES * 8);
-  ec_biscalar_mul_bounded(&ct->PQxy_B.Q, &EB, mask_xy_scalar[2],
-                          mask_xy_scalar[3], &E0_xy, TORSION_2POWER_BYTES * 8);
-  ec_biscalar_mul_bounded(&ct->PQxy_B.PmQ, &EB, mask_xy_scalar[4],
-                          mask_xy_scalar[5], &E0_xy, TORSION_2POWER_BYTES * 8);
-
-  // Compute the isogeny EA -> EAB
-  isogB_prime.curve = pk->EA;
-  isogB_prime.degree[0] = POWER_OF_3;
-  for (int i = 1; i < P_LEN + M_LEN; i++) {
-    isogB_prime.degree[i] = 0;
-  }
-  ec_set_zero(&isogB_prime.ker_minus);
-  // kernel = P + beta * Q
-  ec_biscalar_mul_bounded(&isogB_prime.ker_plus, &isogB_prime.curve, one_scalar,
-                          beta_scalar, &pk->PQ3, TORSION_3POWER_BYTES * 8);
-
-  eval_basis[0] = EA_two;
-  eval_basis[1] = EA_xy;
-  ec_eval_three(&EAB, &isogB_prime, (ec_point_t *)eval_basis, 6);
-  EA_two = eval_basis[0];
-  EA_xy = eval_basis[1];
-
+  eval_basis_AB[0] = pk->PQA;
+  eval_basis_AB[1] = pk->RSA;
+  ec_eval_even(&EAB, &psi_prime, (ec_point_t *)eval_basis_AB, 6);
   ct->EAB = EAB;
 
-  // Masking evaluated basis points
-  xMUL(&ct->PQ2_AB.P, &EA_two.P, omega_scalar, &EAB);
-  xMUL(&ct->PQ2_AB.Q, &EA_two.Q, omega_inv_scalar, &EAB);
-  xADD(&EA_two.PmQ, &EA_two.P, &EA_two.Q, &EA_two.PmQ);
-  ec_biscalar_mul_bounded(&ct->PQ2_AB.PmQ, &EAB, omega_scalar, omega_inv_scalar,
-                          &EA_two, TORSION_2POWER_BYTES * 8);
+  ec_mul_ibz(&ct->PB, &EB, &gamma, &eval_basis_B[0].P);
+  ec_mul_ibz(&ct->PAB, &EAB, &gamma, &eval_basis_AB[0].P);
 
-  ec_biscalar_mul_bounded(&EAB_xy.P, &EAB, mask_xy_scalar[0], mask_xy_scalar[1],
-                          &EA_xy, TORSION_CPOWER_BYTES * 8);
-  ec_biscalar_mul_bounded(&EAB_xy.Q, &EAB, mask_xy_scalar[2], mask_xy_scalar[3],
-                          &EA_xy, TORSION_CPOWER_BYTES * 8);
-  ec_biscalar_mul_bounded(&EAB_xy.PmQ, &EAB, mask_xy_scalar[4],
-                          mask_xy_scalar[5], &EA_xy, TORSION_CPOWER_BYTES * 8);
+  digit_t d1[NWORDS_ORDER], d2[NWORDS_ORDER], d3[NWORDS_ORDER], d4[NWORDS_ORDER];
+  ibz_to_digits(d1, &mask_xy[0][0]);
+  ibz_to_digits(d2, &mask_xy[0][1]);
+  ibz_to_digits(d3, &mask_xy[1][0]);
+  ibz_to_digits(d4, &mask_xy[1][1]);
 
-  // TODO : ct <- SHA256(EAB_xy.P || EAB_xy.Q) xor m
+  ec_biscalar_mul_bounded(&ct->RSB.P, &EB, d1, d2, (ec_basis_t *)&eval_basis_B[1], TORSION_3POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&ct->RSB.Q, &EB, d3, d4, (ec_basis_t *)&eval_basis_B[1], TORSION_3POWER_BYTES * 8);
+  xADD(&ct->RSB.PmQ, &ct->RSB.P, &ct->RSB.Q, &ct->RSB.PmQ);
+
+  ec_basis_t RS_AB;
+  ec_biscalar_mul_bounded(&RS_AB.P, &EAB, d1, d2, &eval_basis_AB[1], TORSION_3POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&RS_AB.Q, &EAB, d3, d4, &eval_basis_AB[1], TORSION_3POWER_BYTES * 8);
+
   unsigned char hash_input[4 * NWORDS_FIELD * RADIX / 8] = {0};
   unsigned char hash_output[32] = {0};
-
-  ec_normalize_point(&EAB_xy.P);
-  ec_normalize_point(&EAB_xy.Q);
-
-  memcpy(hash_input, &EAB_xy.P.x.re[0], NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + NWORDS_FIELD * RADIX / 8, &EAB_xy.P.x.im[0],
-         NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + 2 * NWORDS_FIELD * RADIX / 8, &EAB_xy.Q.x.re[0],
-         NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + 3 * NWORDS_FIELD * RADIX / 8, &EAB_xy.Q.x.im[0],
-         NWORDS_FIELD * RADIX / 8);
+  ec_normalize_point(&RS_AB.P);
+  ec_normalize_point(&RS_AB.Q);
+  memcpy(hash_input, &RS_AB.P.x.re[0], NWORDS_FIELD * RADIX / 8);
+  memcpy(hash_input + NWORDS_FIELD * RADIX / 8, &RS_AB.P.x.im[0], NWORDS_FIELD * RADIX / 8);
+  memcpy(hash_input + 2 * NWORDS_FIELD * RADIX / 8, &RS_AB.Q.x.re[0], NWORDS_FIELD * RADIX / 8);
+  memcpy(hash_input + 3 * NWORDS_FIELD * RADIX / 8, &RS_AB.Q.x.im[0], NWORDS_FIELD * RADIX / 8);
 
   SHAKE256(hash_output, sizeof(hash_output), hash_input, sizeof(hash_input));
-
-  // ct->ct = m xor hash_output
-  memset(ct->ct, 0, sizeof(ct->ct));
   for (size_t i = 0; i < 32; i++) {
-    if (i >= m_len) {
-      ct->ct[i] = hash_output[i];
-    } else {
-      ct->ct[i] = m[i] ^ hash_output[i];
-    }
+    ct->ct[i] = m[i] ^ hash_output[i];
   }
 
-  ibz_mat_2x2_finalize(&mask_xy);
-  ibz_finalize(&TT);
+  ibz_finalize(&s);
+  ibz_finalize(&gamma);
   ibz_finalize(&A);
-  ibz_finalize(&beta);
-  ibz_finalize(&omega);
-  ibz_finalize(&omega_inv);
+  ibz_mat_2x2_finalize(&mask_xy);
   return 1;
 }
 
@@ -561,219 +375,139 @@ int decrypt(unsigned char *m, size_t *m_len, const pokemon_ct_t *ct,
             const pokemon_sk_t *sk) {
   unsigned char hash_input[4 * NWORDS_FIELD * RADIX / 8] = {0};
   unsigned char hash_output[32] = {0};
-  digit_t T1_scalar[NWORDS_ORDER] = {0}, T2_scalar[NWORDS_ORDER] = {0};
-  theta_chain_t hd_isog;
-  theta_couple_curve_t EBAB;
-  theta_couple_point_t T1, T2, T1m2;
-  ec_basis_t eval_points, PQ2_AB;
-  ibz_t alpha_inv, beta_inv, deg, A;
-  ec_point_t pointT;
+  ec_basis_t RS_AB1;
+  ibz_t alpha_inv, beta, q, A, tempx, tempy;
 
   ibz_init(&alpha_inv);
-  ibz_init(&beta_inv);
-  ibz_init(&deg);
+  ibz_init(&beta);
+  ibz_init(&q);
   ibz_init(&A);
+  ibz_init(&tempx);
+  ibz_init(&tempy);
 
-  ibz_copy_digits(&deg, sk->deg, NWORDS_ORDER);
-  ibz_div_2exp(&A, &TORSION_PLUS_2POWER, 2);
+  ibz_copy_digits(&q, sk->deg, NWORDS_ORDER);
   ibz_copy_digits(&alpha_inv, sk->alpha, NWORDS_ORDER);
-  ibz_copy_digits(&beta_inv, sk->beta, NWORDS_ORDER);
-  ibz_invmod(&alpha_inv, &alpha_inv, &TORSION_PLUS_2POWER);
-  ibz_invmod(&beta_inv, &beta_inv, &TORSION_PLUS_2POWER);
-  copy_point(&PQ2_AB.P, &ct->PQ2_AB.P);
-  copy_point(&PQ2_AB.Q, &ct->PQ2_AB.Q);
-  copy_point(&PQ2_AB.PmQ, &ct->PQ2_AB.PmQ);
+  ibz_copy_digits(&beta, sk->beta, NWORDS_ORDER);
+  ibz_copy_digits(&tempx, sk->tempx, NWORDS_ORDER);
+  ibz_copy_digits(&tempy, sk->tempy, NWORDS_ORDER);
+  ibz_copy(&A, &TORSION_PLUS_2POWER);
+  ibz_invmod(&alpha_inv, &alpha_inv, &A);
 
-  EBAB.E1 = ct->EB;
-  EBAB.E2 = ct->EAB;
+  ec_point_t P_AB_prime;
+  ec_mul_ibz(&P_AB_prime, &ct->EAB, &alpha_inv, &ct->PAB);
 
-  ec_mul_ibz(&T1.P1, &EBAB.E1, &deg, &ct->PQ2_B.P);
-  ec_mul_ibz(&T2.P1, &EBAB.E1, &deg, &ct->PQ2_B.Q);
-  ec_mul_ibz(&T1m2.P1, &EBAB.E1, &deg, &ct->PQ2_B.PmQ);
-  ibz_to_digits(T1_scalar, &alpha_inv);
-  ibz_to_digits(T2_scalar, &beta_inv);
-  xMUL(&T1.P2, &ct->PQ2_AB.P, T1_scalar, &EBAB.E2);
-  xMUL(&T2.P2, &ct->PQ2_AB.Q, T2_scalar, &EBAB.E2);
-  xADD(&PQ2_AB.PmQ, &PQ2_AB.P, &PQ2_AB.Q, &PQ2_AB.PmQ);
-  ec_biscalar_mul_bounded(&T1m2.P2, &EBAB.E2, T1_scalar, T2_scalar, &PQ2_AB,
-                          TORSION_2POWER_BYTES * 8);
+  printf("HINT: one_point (radical dim 4 isogeny) should be implemented here\n");
+  ec_mul_ibz(&RS_AB1.P, &ct->EAB, &beta, &ct->RSB.P); // Placeholder
+  ec_mul_ibz(&RS_AB1.Q, &ct->EAB, &beta, &ct->RSB.Q); // Placeholder
 
-  theta_chain_comput_strategy(&hd_isog, POWER_OF_2 - 2, &EBAB, &T1, &T2, &T1m2,
-                              strategies[2], 1);
-
-  eval_points.P = ct->PQxy_B.P;
-  eval_points.Q = ct->PQxy_B.Q;
-  eval_points.PmQ = ct->PQxy_B.PmQ;
-  ibz_sub(&deg, &A, &deg);
-  if (!eval_dimtwo_isog(&hd_isog, &deg, &eval_points, &eval_points, &EBAB,
-                        true)) {
-    printf("Failed to evaluate the 2-dim isogeny\n");
-    return 0;
-  }
-
-  xMUL(&eval_points.P, &eval_points.P, sk->delta, &EBAB.E2);
-  xMUL(&eval_points.Q, &eval_points.Q, sk->delta, &EBAB.E2);
-  xMUL(&eval_points.PmQ, &eval_points.PmQ, sk->delta, &EBAB.E2);
-
-  ec_normalize_point(&eval_points.P);
-  ec_normalize_point(&eval_points.Q);
-
-  memcpy(hash_input, &eval_points.P.x.re[0], NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + NWORDS_FIELD * RADIX / 8, &eval_points.P.x.im[0],
+  ec_normalize_point(&RS_AB1.P);
+  ec_normalize_point(&RS_AB1.Q);
+  memcpy(hash_input, &RS_AB1.P.x.re[0], NWORDS_FIELD * RADIX / 8);
+  memcpy(hash_input + NWORDS_FIELD * RADIX / 8, &RS_AB1.P.x.im[0],
          NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + 2 * NWORDS_FIELD * RADIX / 8, &eval_points.Q.x.re[0],
+  memcpy(hash_input + 2 * NWORDS_FIELD * RADIX / 8, &RS_AB1.Q.x.re[0],
          NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + 3 * NWORDS_FIELD * RADIX / 8, &eval_points.Q.x.im[0],
+  memcpy(hash_input + 3 * NWORDS_FIELD * RADIX / 8, &RS_AB1.Q.x.im[0],
          NWORDS_FIELD * RADIX / 8);
 
   SHAKE256(hash_output, sizeof(hash_output), hash_input, sizeof(hash_input));
-
-  // m = ct->ct xor hash_output
-  memset(m, 0, sizeof(hash_output));
-  for (size_t i = 0; i < sizeof(hash_output); i++) {
+  for (size_t i = 0; i < 32; i++) {
     m[i] = ct->ct[i] ^ hash_output[i];
   }
-  *m_len = sizeof(hash_output);
+  *m_len = 32;
 
   ibz_finalize(&alpha_inv);
-  ibz_finalize(&beta_inv);
-  ibz_finalize(&deg);
+  ibz_finalize(&beta);
+  ibz_finalize(&q);
   ibz_finalize(&A);
+  ibz_finalize(&tempx);
+  ibz_finalize(&tempy);
   return 1;
 }
 
 int check_ct(const pokemon_ct_t *ct, const pokemon_pk_t *pk,
              const unsigned char *seed, const size_t seed_len) {
-  ibz_mat_2x2_t mask_xy;
-  ec_isog_odd_t isogB, isogB_prime1, isogB_prime;
-  ibz_t beta;
-  ec_curve_t EB, EA1B, EAB;
-  ec_point_t pointT;
+  ec_isog_even_t isogB;
+  ibz_t s, A;
+  ec_curve_t EB;
   shake256ctx state;
+  digit_t s_scalar[NWORDS_ORDER] = {0};
+  digit_t one_scalar[NWORDS_ORDER] = {1};
 
-  digit_t beta_scalar[NWORDS_ORDER] = {0}, one_scalar[NWORDS_ORDER] = {1};
+  ibz_init(&s);
+  ibz_init(&A);
+  ibz_copy(&A, &TORSION_PLUS_2POWER);
 
-  ibz_init(&beta);
-  // ibz_init(&omega);
-  // ibz_init(&omega_inv);
-  // ibz_init(&TT);
-  // ibz_init(&A);
-  // ibz_mat_2x2_init(&mask_xy);
-
-  // ibz_div_2exp(&A, &TORSION_PLUS_2POWER, 2);
   if (seed != NULL) {
     shake256_absorb(&state, seed, seed_len);
-    ibz_random_unit(&beta, &TORSION_PLUS_3POWER, &state);
-    // ibz_random_unit(&omega, &A, &state);
-    // shake256_ctx_release(&state);
+    ibz_rand_interval_with_state(&s, &ibz_const_zero, &A, &state);
+    shake256_ctx_release(&state);
   } else {
-    // Error: seed is required for checking
     return 0;
   }
-  // ibz_invmod(&omega_inv, &omega, &A);
-  // ibz_to_digits(omega_scalar, &omega);
-  // ibz_to_digits(omega_inv_scalar, &omega_inv);
-  ibz_to_digits(beta_scalar, &beta);
+  ibz_to_digits(s_scalar, &s);
 
-  // Compute the isogeny E0 -> EB
   isogB.curve = CURVE_E0;
-  isogB.degree[0] = POWER_OF_3;
-  for (int i = 1; i < P_LEN + M_LEN; i++) {
-    isogB.degree[i] = 0;
-  }
-  ec_set_zero(&isogB.ker_minus);
-  // kernel = P + beta * Q
-  xDBLMUL_bounded(&isogB.ker_plus, &BASIS_THREE.P, one_scalar, &BASIS_THREE.Q,
-                  beta_scalar, &BASIS_THREE.PmQ, &isogB.curve,
-                  TORSION_3POWER_BYTES * 8);
+  isogB.length = TORSION_PLUS_EVEN_POWER;
+  ec_biscalar_mul_bounded(&isogB.kernel, &isogB.curve, one_scalar,
+                          s_scalar, (ec_basis_t *)&BASIS_EVEN, TORSION_2POWER_BYTES * 8);
 
-  ec_eval_three(&EB, &isogB, NULL, 0);
+  ec_eval_even(&EB, &isogB, NULL, 0);
 
   fp2_t j1, j2;
   ec_j_inv(&j1, &EB);
   ec_j_inv(&j2, &ct->EB);
 
+  ibz_finalize(&s);
+  ibz_finalize(&A);
   return (fp2_is_equal(&j1, &j2) != 0);
 }
-
-////
-//// Key Encapsulation Mechanism using Fujisaki-Okamoto transform
-////
 
 const unsigned char G_hash_str[9] = "encrypt_";
 const size_t G_hash_str_len = 8;
 
 int ct_encode(unsigned char *encoded_ct, pokemon_ct_t *ct) {
-  ec_basis_t added_basis;
-  jac_point_t P2, Q2, Px, Qx;
-  jac_point_t R, S, RmS;
-  // total_len += NWORDS_FIELD * 2; // EB
-  // total_len += NWORDS_ORDER * 6; // PQ2_B + PQxy_B -> 4/3 * lambda
-  // total_len += NWORDS_FIELD * 2; // EAB
-  // total_len += NWORDS_ORDER * 6; // PQ2_AB -> lambda
-  lift_basis(&P2, &Q2, &ct->PQ2_B, &ct->EB);
-  lift_basis(&Px, &Qx, &ct->PQxy_B, &ct->EB);
-  ADD(&R, &P2, &Px, &ct->EB);
-  ADD(&S, &Q2, &Qx, &ct->EB);
-  jac_neg(&RmS, &S);
-  ADD(&RmS, &R, &RmS, &ct->EB);
-  jac_to_xz(&added_basis.P, &R);
-  jac_to_xz(&added_basis.Q, &S);
-  jac_to_xz(&added_basis.PmQ, &RmS);
-
-  fp2_encode(encoded_ct, &ct->EB.A);
-  fp2_encode(encoded_ct + NWORDS_FIELD * RADIX * 2 / 8, &added_basis.P.x);
-  fp2_encode(encoded_ct + NWORDS_FIELD * RADIX * 4 / 8, &added_basis.Q.x);
-  fp2_encode(encoded_ct + NWORDS_FIELD * RADIX * 6 / 8, &added_basis.PmQ.x);
-  fp2_encode(encoded_ct + NWORDS_FIELD * RADIX * 8 / 8, &ct->EAB.A);
-  fp2_encode(encoded_ct + NWORDS_FIELD * RADIX * 10 / 8, &ct->PQ2_AB.P.x);
-  fp2_encode(encoded_ct + NWORDS_FIELD * RADIX * 12 / 8, &ct->PQ2_AB.Q.x);
-  fp2_encode(encoded_ct + NWORDS_FIELD * RADIX * 14 / 8, &ct->PQ2_AB.PmQ.x);
-
+  int offset = 0;
+  fp2_encode(encoded_ct + offset, &ct->EB.A);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_encode(encoded_ct + offset, &ct->EAB.A);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_encode(encoded_ct + offset, &ct->RSB.P.x);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_encode(encoded_ct + offset, &ct->RSB.Q.x);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_encode(encoded_ct + offset, &ct->RSB.PmQ.x);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_encode(encoded_ct + offset, &ct->PB.x);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_encode(encoded_ct + offset, &ct->PAB.x);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  memcpy(encoded_ct + offset, ct->ct, 32);
   return 1;
 }
 
 int ct_decode(pokemon_ct_t *ct, const unsigned char *encoded_ct) {
-  ec_basis_t added_basis;
-  ibz_t five_inv, two_inv;
-  ibz_init(&five_inv);
-  ibz_init(&two_inv);
-
-  fp2_decode(&ct->EB.A, encoded_ct);
-  fp2_decode(&added_basis.P.x, encoded_ct + NWORDS_FIELD * RADIX * 2 / 8);
-  fp2_decode(&added_basis.Q.x, encoded_ct + NWORDS_FIELD * RADIX * 4 / 8);
-  fp2_decode(&added_basis.PmQ.x, encoded_ct + NWORDS_FIELD * RADIX * 6 / 8);
-  fp2_set_one(&added_basis.P.z);
-  fp2_set_one(&added_basis.Q.z);
-  fp2_set_one(&added_basis.PmQ.z);
-  fp2_decode(&ct->EAB.A, encoded_ct + NWORDS_FIELD * RADIX * 8 / 8);
-  fp2_decode(&ct->PQ2_AB.P.x, encoded_ct + NWORDS_FIELD * RADIX * 10 / 8);
-  fp2_decode(&ct->PQ2_AB.Q.x, encoded_ct + NWORDS_FIELD * RADIX * 12 / 8);
-  fp2_decode(&ct->PQ2_AB.PmQ.x, encoded_ct + NWORDS_FIELD * RADIX * 14 / 8);
-  fp2_set_one(&ct->PQ2_AB.P.z);
-  fp2_set_one(&ct->PQ2_AB.Q.z);
-  fp2_set_one(&ct->PQ2_AB.PmQ.z);
-
-  ibz_invmod(&five_inv, &TORSION_PLUS_CPOWER, &TORSION_PLUS_2POWER);
-  ibz_invmod(&two_inv, &TORSION_PLUS_2POWER, &TORSION_PLUS_CPOWER);
-
-  ec_mul_ibz(&ct->PQ2_B.P, &ct->EB, &TORSION_PLUS_CPOWER, &added_basis.P);
-  ec_mul_ibz(&ct->PQ2_B.Q, &ct->EB, &TORSION_PLUS_CPOWER, &added_basis.Q);
-  ec_mul_ibz(&ct->PQ2_B.PmQ, &ct->EB, &TORSION_PLUS_CPOWER, &added_basis.PmQ);
-  ec_mul_ibz(&ct->PQ2_B.P, &ct->EB, &five_inv, &added_basis.P);
-  ec_mul_ibz(&ct->PQ2_B.Q, &ct->EB, &five_inv, &added_basis.Q);
-  ec_mul_ibz(&ct->PQ2_B.PmQ, &ct->EB, &five_inv, &added_basis.PmQ);
-
-  ec_mul_ibz(&ct->PQxy_B.P, &ct->EB, &TORSION_PLUS_2POWER, &added_basis.P);
-  ec_mul_ibz(&ct->PQxy_B.Q, &ct->EB, &TORSION_PLUS_2POWER, &added_basis.Q);
-  ec_mul_ibz(&ct->PQxy_B.PmQ, &ct->EB, &TORSION_PLUS_2POWER, &added_basis.PmQ);
-  ec_mul_ibz(&ct->PQxy_B.P, &ct->EB, &two_inv, &added_basis.P);
-  ec_mul_ibz(&ct->PQxy_B.Q, &ct->EB, &two_inv, &added_basis.Q);
-  ec_mul_ibz(&ct->PQxy_B.PmQ, &ct->EB, &two_inv, &added_basis.PmQ);
-
-  ibz_finalize(&five_inv);
-  ibz_finalize(&two_inv);
-
+  int offset = 0;
+  fp2_decode(&ct->EB.A, encoded_ct + offset);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_decode(&ct->EAB.A, encoded_ct + offset);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_decode(&ct->RSB.P.x, encoded_ct + offset);
+  fp2_set_one(&ct->RSB.P.z);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_decode(&ct->RSB.Q.x, encoded_ct + offset);
+  fp2_set_one(&ct->RSB.Q.z);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_decode(&ct->RSB.PmQ.x, encoded_ct + offset);
+  fp2_set_one(&ct->RSB.PmQ.z);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_decode(&ct->PB.x, encoded_ct + offset);
+  fp2_set_one(&ct->PB.z);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  fp2_decode(&ct->PAB.x, encoded_ct + offset);
+  fp2_set_one(&ct->PAB.z);
+  offset += 2 * NWORDS_FIELD * RADIX / 8;
+  memcpy(ct->ct, encoded_ct + offset, 32);
   return 1;
 }
 
@@ -781,17 +515,18 @@ int encaps(unsigned char *key, pokemon_ct_t *ct, const pokemon_pk_t *pk) {
   unsigned char m[32];
   unsigned char tt[32 + G_hash_str_len];
   unsigned char gm[32];
-  unsigned char encoded_ct[32 + NWORDS_FIELD * 16 * RADIX / 8];
+  size_t encoded_ct_len = 32 + 7 * (2 * NWORDS_FIELD * RADIX / 8) + 32;
+  unsigned char *encoded_ct = malloc(encoded_ct_len);
 
   randombytes(m, 32);
   memcpy(tt, G_hash_str, G_hash_str_len);
-  memcpy(tt, m, 32);
-  SHAKE256(gm, 32, tt, 32);
-  encrypt(ct, pk, m, 32, gm, 32); // ct <- Enc(pk, m; G(m))
+  memcpy(tt + G_hash_str_len, m, 32);
+  SHAKE256(gm, 32, tt, 32 + G_hash_str_len);
+  encrypt(ct, pk, m, 32, gm, 32);
   memcpy(encoded_ct, m, 32);
   ct_encode(encoded_ct + 32, ct);
-  SHAKE256(key, 32, encoded_ct,
-           32 + NWORDS_FIELD * 16 * RADIX / 8); // K <- H(m, ct)
+  SHAKE256(key, 32, encoded_ct, encoded_ct_len);
+  free(encoded_ct);
   return 1;
 }
 
@@ -800,22 +535,21 @@ int decaps(unsigned char *key, pokemon_ct_t *ct, const pokemon_pk_t *pk,
   unsigned char m[32];
   unsigned char tt[32 + G_hash_str_len];
   unsigned char gm[32];
-  unsigned char test_ct_bytes[NWORDS_FIELD * 16 * RADIX / 8];
-  unsigned char ct_bytes[32 + NWORDS_FIELD * 16 * RADIX / 8];
+  size_t encoded_ct_len = 32 + 7 * (2 * NWORDS_FIELD * RADIX / 8) + 32;
+  unsigned char *ct_bytes = malloc(encoded_ct_len);
   size_t m_len;
-  pokemon_ct_t test_ct;
 
   decrypt(m, &m_len, ct, sk);
   memcpy(tt, G_hash_str, G_hash_str_len);
-  memcpy(tt, m, 32);
-  SHAKE256(gm, 32, tt, 32);
-  ct_encode(ct_bytes + 32, ct);
+  memcpy(tt + G_hash_str_len, m, 32);
+  SHAKE256(gm, 32, tt, 32 + G_hash_str_len);
   if (check_ct(ct, pk, gm, 32) != 1) {
-    memcpy(ct_bytes, dummy_m, 32); // K <- H(s, ct)
+    memcpy(ct_bytes, dummy_m, 32);
   } else {
-    memcpy(ct_bytes, m, 32); // K <- H(m, ct)
+    memcpy(ct_bytes, m, 32);
   }
-  SHAKE256(key, 32, ct_bytes, 32 + NWORDS_FIELD * 16 * RADIX / 8);
-
+  ct_encode(ct_bytes + 32, ct);
+  SHAKE256(key, 32, ct_bytes, encoded_ct_len);
+  free(ct_bytes);
   return 1;
 }

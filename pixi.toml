@@ -1,0 +1,11 @@
+[workspace]
+authors = ["小猫 <i@sinofine.me>"]
+channels = ["conda-forge"]
+name = "poke"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+sage = ">=10.7,<11"

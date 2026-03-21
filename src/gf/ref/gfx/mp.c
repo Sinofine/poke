@@ -1,5 +1,7 @@
 // TODO this should be its own module
+#include <string.h>
 #include "mp.h"
+#include "fp.h"
 #include "fp_constants.h"
 #include <assert.h>
 
