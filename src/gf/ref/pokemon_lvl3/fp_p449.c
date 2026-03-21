@@ -5965,11 +5965,5 @@ void fiat_p449_divstep(uint64_t *out1, uint64_t out2[9], uint64_t out3[9],
   void
   fp_mont_setone(fp_t *out)
   {
-    fiat_p449_set_one(*out);
-  }
-
-  void
-  fp_neg(fp_t *out, const fp_t *a)
-  {
-    fiat_p449_opp(*out, *a);
+      fiat_p449_set_one(*out);
   }
