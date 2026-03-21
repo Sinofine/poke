@@ -192,22 +192,23 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   theta_chain_eval_special_case(&PmQ0_out, &hd_isog, &PmQ0_out, &E01);
 
   fp2_t e_P0Q0, e_P2Q2, e_P3Q3, target_pairing;
-  fp2_init(&e_P0Q0); fp2_init(&e_P2Q2); fp2_init(&e_P3Q3); fp2_init(&target_pairing);
   
   ec_basis_t B_E2, B_E3;
   B_E2.P = P0_out.P1; B_E2.Q = Q0_out.P1; B_E2.PmQ = PmQ0_out.P1;
   B_E3.P = P0_out.P2; B_E3.Q = Q0_out.P2; B_E3.PmQ = PmQ0_out.P2;
 
-  ec_weil_pairing_p_ibz(&e_P0Q0, &BASIS_EVEN, &TORSION_PLUS_2POWER);
-  fp2_pow(&target_pairing, &e_P0Q0, &q);
-  ec_weil_pairing_p_ibz(&e_P2Q2, &B_E2, &TORSION_PLUS_2POWER);
+  digit_t q_digits[NWORDS_ORDER];
+  ibz_to_digits(q_digits, &q);
+  weil(&e_P0Q0, TORSION_PLUS_EVEN_POWER, (ec_point_t *)&BASIS_EVEN.P, (ec_point_t *)&BASIS_EVEN.Q, (ec_point_t *)&BASIS_EVEN.PmQ, &curve.A24);
+  fp2_pow_vartime(&target_pairing, &e_P0Q0, q_digits, NWORDS_ORDER);
+  weil(&e_P2Q2, TORSION_PLUS_EVEN_POWER, &B_E2.P, &B_E2.Q, &B_E2.PmQ, &curve.A24);
   
   int use_E2 = 0;
   if (fp2_is_equal(&e_P2Q2, &target_pairing)) {
     pk->EA = hd_isog.codomain.E1;
     use_E2 = 1;
   } else {
-    ec_weil_pairing_p_ibz(&e_P3Q3, &B_E3, &TORSION_PLUS_2POWER);
+    weil(&e_P3Q3, TORSION_PLUS_EVEN_POWER, &B_E3.P, &B_E3.Q, &B_E3.PmQ, &curve.A24);
     if (fp2_is_equal(&e_P3Q3, &target_pairing)) {
       pk->EA = hd_isog.codomain.E2;
       use_E2 = 0;
@@ -217,11 +218,9 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
       ibz_finalize(&deg); ibz_finalize(&A); ibz_finalize(&two_to_a); ibz_finalize(&tempx);
       ibz_finalize(&tempy); ibz_finalize(&three_m1_order); ibz_finalize(&remainder);
       ibz_finalize(&inverse);
-      fp2_finalize(&e_P0Q0); fp2_finalize(&e_P2Q2); fp2_finalize(&e_P3Q3); fp2_finalize(&target_pairing);
       return 1;
     }
   }
-  fp2_finalize(&e_P0Q0); fp2_finalize(&e_P2Q2); fp2_finalize(&e_P3Q3); fp2_finalize(&target_pairing);
 
   jac_point_t P, Q, R, S, T;
   lift_basis(&P, &Q, (ec_basis_t *)&BASIS_EVEN, &curve);
