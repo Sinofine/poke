@@ -3062,9 +3062,3 @@ fp_mont_setone(fp_t *out)
 {
     fiat_p295_set_one(*out);
 }
-
-void
-fp_neg(fp_t *out, const fp_t *a)
-{
-    fiat_p295_opp(*out, *a);
-}
