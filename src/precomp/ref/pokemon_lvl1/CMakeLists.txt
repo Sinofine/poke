@@ -32,11 +32,11 @@ add_custom_target(precomp_${SVARIANT_LOWER}
     DEPENDS
         "./poke_parameters.txt"
     COMMAND
-        "${SAGEMATH}" "${PROJECT_SOURCE_DIR}/scripts/precompute_torsion_constants.sage"
+        "${SAGEMATH}" "${PROJECT_SOURCE_DIR}/scripts/precompute_torsion_constants_pokemon.sage"
     COMMAND
         "${SAGEMATH}" "${PROJECT_SOURCE_DIR}/scripts/precompute_endomorphism_action_pokemon.sage"
     COMMAND
-        "${SAGEMATH}" "${PROJECT_SOURCE_DIR}/scripts/ec_params.py"
+        "${SAGEMATH}" "${PROJECT_SOURCE_DIR}/scripts/ec_params_pokemon.py"
     COMMAND
         "${SAGEMATH}" "${PROJECT_SOURCE_DIR}/scripts/precompute_gf_constants.sage"
     COMMAND

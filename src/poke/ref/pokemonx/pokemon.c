@@ -1,63 +1,68 @@
 #include "pokemon.h"
-#include <intbig.h>
-#include <fp2.h>
-#include <ec.h>
-#include <hd.h>
-#include <fips202.h>
-#include <quaternion.h>
-#include <torsion_constants.h>
-#include <endomorphism_action.h>
 #include <biextension.h>
-#include <rng.h>
-#include <klpt.h>
+#include <ec.h>
+#include <endomorphism_action.h>
+#include <fips202.h>
+#include <gmp.h>
+#include <hd.h>
 #include <id2iso.h>
+#include <intbig.h>
+#include <klpt.h>
+#include <quaternion.h>
+#include <rng.h>
+#include <stdio.h>
+#include <torsion_constants.h>
 
-
-int ibz_random_matrix(ibz_mat_2x2_t mat22, const ibz_t *modulus, shake256ctx *state) {
-    ibz_t gcd, det;
-    ibz_init(&gcd);
-    ibz_init(&det);
-    while (1) {
-        if (state != NULL) {
-            ibz_rand_interval_with_state(&mat22[0][0], &ibz_const_zero, modulus, state);
-            ibz_rand_interval_with_state(&mat22[0][1], &ibz_const_zero, modulus, state);
-            ibz_rand_interval_with_state(&mat22[1][0], &ibz_const_zero, modulus, state);
-            ibz_rand_interval_with_state(&mat22[1][1], &ibz_const_zero, modulus, state);
-        } else {
-            ibz_rand_interval(&mat22[0][0], &ibz_const_zero, modulus);
-            ibz_rand_interval(&mat22[0][1], &ibz_const_zero, modulus);
-            ibz_rand_interval(&mat22[1][0], &ibz_const_zero, modulus);
-            ibz_rand_interval(&mat22[1][1], &ibz_const_zero, modulus);
-        }
-        ibz_mul(&det, &mat22[0][0], &mat22[1][1]);
-        ibz_mul(&gcd, &mat22[0][1], &mat22[1][0]);
-        ibz_sub(&det, &det, &gcd);
-        ibz_gcd(&gcd, &det, modulus);
-        if (ibz_is_one(&gcd)) {
-            break;
-        }
+int ibz_random_matrix(ibz_mat_2x2_t mat22, const ibz_t *modulus,
+                      shake256ctx *state) {
+  ibz_t gcd, det;
+  ibz_init(&gcd);
+  ibz_init(&det);
+  while (1) {
+    if (state != NULL) {
+      ibz_rand_interval_with_state(&mat22[0][0], &ibz_const_zero, modulus,
+                                   state);
+      ibz_rand_interval_with_state(&mat22[0][1], &ibz_const_zero, modulus,
+                                   state);
+      ibz_rand_interval_with_state(&mat22[1][0], &ibz_const_zero, modulus,
+                                   state);
+      ibz_rand_interval_with_state(&mat22[1][1], &ibz_const_zero, modulus,
+                                   state);
+    } else {
+      ibz_rand_interval(&mat22[0][0], &ibz_const_zero, modulus);
+      ibz_rand_interval(&mat22[0][1], &ibz_const_zero, modulus);
+      ibz_rand_interval(&mat22[1][0], &ibz_const_zero, modulus);
+      ibz_rand_interval(&mat22[1][1], &ibz_const_zero, modulus);
     }
-    ibz_finalize(&gcd);
-    ibz_finalize(&det);
-    return 1;
+    ibz_mul(&det, &mat22[0][0], &mat22[1][1]);
+    ibz_mul(&gcd, &mat22[0][1], &mat22[1][0]);
+    ibz_sub(&det, &det, &gcd);
+    ibz_gcd(&gcd, &det, modulus);
+    if (ibz_is_one(&gcd)) {
+      break;
+    }
+  }
+  ibz_finalize(&gcd);
+  ibz_finalize(&det);
+  return 1;
 }
 
 int ibz_random_unit(ibz_t *q, const ibz_t *modulus, shake256ctx *state) {
-    ibz_t gcd;
-    ibz_init(&gcd);
-    while (1) {
-        if (state != NULL) {
-            ibz_rand_interval_with_state(q, &ibz_const_zero, modulus, state);
-        } else {
-            ibz_rand_interval(q, &ibz_const_zero, modulus);
-        }
-        ibz_gcd(&gcd, q, modulus);
-        if (ibz_is_one(&gcd)) {
-            break;
-        }
+  ibz_t gcd;
+  ibz_init(&gcd);
+  while (1) {
+    if (state != NULL) {
+      ibz_rand_interval_with_state(q, &ibz_const_zero, modulus, state);
+    } else {
+      ibz_rand_interval(q, &ibz_const_zero, modulus);
     }
-    ibz_finalize(&gcd);
-    return 1;
+    ibz_gcd(&gcd, q, modulus);
+    if (ibz_is_one(&gcd)) {
+      break;
+    }
+  }
+  ibz_finalize(&gcd);
+  return 1;
 }
 
 int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
@@ -76,34 +81,38 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   ibz_init(&tempy);
 
   ibz_copy(&A, &TORSION_PLUS_2POWER);
+  gmp_printf("A: %Zd\n", A);
   ibz_div_2exp(&two_to_a, &A, TORSION_PLUS_EVEN_POWER / 2);
 
-  for (int i = 0; i < 1000; i++) {
-    ibz_t x_bound, y_bound;
+  for (int i = 0; i < 10000; i++) {
+    ibz_t x_bound;
     ibz_init(&x_bound);
-    ibz_init(&y_bound);
     ibz_sqrt(&x_bound, &two_to_a);
-    ibz_rand_interval(&tempx, &ibz_const_zero, &x_bound);
-    ibz_mul(&rhs, &tempx, &tempx);
-    ibz_sub(&y_bound, &two_to_a, &rhs);
-    if (ibz_cmp(&y_bound, &ibz_const_zero) > 0) {
-      ibz_sqrt(&y_bound, &y_bound);
-      ibz_rand_interval(&tempy, &ibz_const_zero, &y_bound);
-      ibz_mul(&rhs, &tempy, &tempy);
-      ibz_mul(&deg, &tempx, &tempx);
-      ibz_add(&deg, &deg, &rhs);
-      ibz_sub(&q, &two_to_a, &deg);
-      if (ibz_cmp(&q, &ibz_const_zero) > 0 &&
-          ibz_divides(&q, &ibz_const_three) == 0) {
-        ibz_finalize(&x_bound);
-        ibz_finalize(&y_bound);
-        break;
-      }
+    ibz_add(&x_bound, &x_bound, &ibz_const_one);
+
+    ibz_rand_interval(&tempx, &ibz_const_one, &x_bound);
+    ibz_div_2exp(&tempx, &tempx, 1);
+    ibz_mul_2exp(&tempx, &tempx, 1);
+
+    ibz_rand_interval(&tempy, &ibz_const_one, &x_bound);
+    ibz_div_2exp(&tempy, &tempy, 1);
+    ibz_mul_2exp(&tempy, &tempy, 1);
+    ibz_add(&tempy, &tempy, &ibz_const_one);
+
+    ibz_mul(&deg, &tempx, &tempx);
+    ibz_mul(&rhs, &tempy, &tempy);
+    ibz_add(&deg, &deg, &rhs);
+    ibz_sub(&q, &two_to_a, &deg);
+
+    if (ibz_cmp(&q, &ibz_const_zero) > 0 &&
+        ibz_divides(&q, &ibz_const_three) == 0) {
+      ibz_finalize(&x_bound);
+      break;
     }
     ibz_finalize(&x_bound);
-    ibz_finalize(&y_bound);
   }
-
+  gmp_printf("two_to_a: %Zd, A: %Zd, q: %Zd, 3^b: %Zd\n", two_to_a, A, q, TORSION_PLUS_3POWER);
+  // A = 2^2a, TORSION_PLUS_3POWER = 3^b
   ibz_sub(&deg, &A, &q);
   ibz_mul(&rhs, &deg, &q);
   ibz_mul(&rhs, &rhs, &TORSION_PLUS_3POWER);
@@ -121,7 +130,7 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   quat_alg_elem_t tau;
   quat_alg_elem_init(&tau);
   represent_integer(&tau, &rhs, &QUATALG_PINFTY);
-  
+
   ec_basis_t E0_two, E0_three;
   copy_point(&E0_two.P, &BASIS_EVEN.P);
   copy_point(&E0_two.Q, &BASIS_EVEN.Q);
@@ -130,8 +139,10 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   copy_point(&E0_three.Q, &BASIS_THREE.Q);
   copy_point(&E0_three.PmQ, &BASIS_THREE.PmQ);
 
-  endomorphism_application_three_basis(&E0_three, &curve, &tau, TORSION_PLUS_ODD_POWERS[0]);
-  endomorphism_application_even_basis(&E0_two, &curve, &tau, TORSION_PLUS_EVEN_POWER);
+  endomorphism_application_three_basis(&E0_three, &curve, &tau,
+                                       TORSION_PLUS_ODD_POWERS[0]);
+  endomorphism_application_even_basis(&E0_two, &curve, &tau,
+                                      TORSION_PLUS_EVEN_POWER);
   quat_alg_elem_finalize(&tau);
 
   ec_isog_odd_t isog;
@@ -140,7 +151,7 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   ibz_init(&three_m1_order);
   ibz_init(&remainder);
   ibz_div(&three_m1_order, &remainder, &TORSION_PLUS_3POWER, &ibz_const_three);
-  
+  // test ord P = 3^b
   ec_point_t test_point;
   ec_mul_ibz(&test_point, &curve, &three_m1_order, &E0_three.P);
   if (ec_is_zero(&test_point)) {
@@ -150,6 +161,9 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   }
   ec_set_zero(&isog.ker_minus);
   isog.degree[0] = TORSION_PLUS_ODD_POWERS[0];
+  for(int i = 1; i < P_LEN + M_LEN; i++) {
+        isog.degree[i] = 0;
+    }
 
   ec_curve_t E1;
   ec_eval_three(&E1, &isog, (ec_point_t *)&E0_two, 3);
@@ -177,8 +191,10 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   T1.P2 = E0_two.P;
   T2.P2 = E0_two.Q;
   T1m2.P2 = E0_two.PmQ;
+  
 
-  theta_chain_comput_strategy(&hd_isog, TORSION_PLUS_EVEN_POWER - 2, &E01, &T1, &T2, &T1m2, strategies[2], 1);
+  theta_chain_comput_strategy(&hd_isog, TORSION_PLUS_EVEN_POWER - 2, &E01, &T1,
+                              &T2, &T1m2, strategies[2], 1);
 
   theta_couple_point_t P0_out, Q0_out, PmQ0_out;
   P0_out.P1 = BASIS_EVEN.P;
@@ -192,31 +208,49 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   theta_chain_eval_special_case(&PmQ0_out, &hd_isog, &PmQ0_out, &E01);
 
   fp2_t e_P0Q0, e_P2Q2, e_P3Q3, target_pairing;
-  
+
   ec_basis_t B_E2, B_E3;
-  B_E2.P = P0_out.P1; B_E2.Q = Q0_out.P1; B_E2.PmQ = PmQ0_out.P1;
-  B_E3.P = P0_out.P2; B_E3.Q = Q0_out.P2; B_E3.PmQ = PmQ0_out.P2;
+  B_E2.P = P0_out.P1;
+  B_E2.Q = Q0_out.P1;
+  B_E2.PmQ = PmQ0_out.P1;
+  B_E3.P = P0_out.P2;
+  B_E3.Q = Q0_out.P2;
+  B_E3.PmQ = PmQ0_out.P2;
 
   digit_t q_digits[NWORDS_ORDER];
   ibz_to_digits(q_digits, &q);
-  weil(&e_P0Q0, TORSION_PLUS_EVEN_POWER, (ec_point_t *)&BASIS_EVEN.P, (ec_point_t *)&BASIS_EVEN.Q, (ec_point_t *)&BASIS_EVEN.PmQ, &curve.A24);
+  point_print("P:", BASIS_EVEN.P);
+  point_print("Q:", BASIS_EVEN.Q);
+  point_print("PmQ:", BASIS_EVEN.PmQ);
+  weil(&e_P0Q0, TORSION_PLUS_EVEN_POWER, (ec_point_t *)&BASIS_EVEN.P,
+       (ec_point_t *)&BASIS_EVEN.Q, (ec_point_t *)&BASIS_EVEN.PmQ, &curve.A24);
   fp2_pow_vartime(&target_pairing, &e_P0Q0, q_digits, NWORDS_ORDER);
-  weil(&e_P2Q2, TORSION_PLUS_EVEN_POWER, &B_E2.P, &B_E2.Q, &B_E2.PmQ, &curve.A24);
-  
+  weil(&e_P2Q2, TORSION_PLUS_EVEN_POWER, &B_E2.P, &B_E2.Q, &B_E2.PmQ,
+       &curve.A24);
+
   int use_E2 = 0;
   if (fp2_is_equal(&e_P2Q2, &target_pairing)) {
     pk->EA = hd_isog.codomain.E1;
     use_E2 = 1;
   } else {
-    weil(&e_P3Q3, TORSION_PLUS_EVEN_POWER, &B_E3.P, &B_E3.Q, &B_E3.PmQ, &curve.A24);
+    weil(&e_P3Q3, TORSION_PLUS_EVEN_POWER, &B_E3.P, &B_E3.Q, &B_E3.PmQ,
+         &curve.A24);
     if (fp2_is_equal(&e_P3Q3, &target_pairing)) {
       pk->EA = hd_isog.codomain.E2;
       use_E2 = 0;
     } else {
       // Finalize all ibz_t variables on failure
-      ibz_finalize(&q); ibz_finalize(&alpha); ibz_finalize(&beta); ibz_finalize(&rhs);
-      ibz_finalize(&deg); ibz_finalize(&A); ibz_finalize(&two_to_a); ibz_finalize(&tempx);
-      ibz_finalize(&tempy); ibz_finalize(&three_m1_order); ibz_finalize(&remainder);
+      ibz_finalize(&q);
+      ibz_finalize(&alpha);
+      ibz_finalize(&beta);
+      ibz_finalize(&rhs);
+      ibz_finalize(&deg);
+      ibz_finalize(&A);
+      ibz_finalize(&two_to_a);
+      ibz_finalize(&tempx);
+      ibz_finalize(&tempy);
+      ibz_finalize(&three_m1_order);
+      ibz_finalize(&remainder);
       ibz_finalize(&inverse);
       return 1;
     }
@@ -239,13 +273,16 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
 
   theta_couple_point_t combined_out;
   ec_basis_t imPQ23x;
-  combined_out.P1 = eval_points.P; ec_set_zero(&combined_out.P2);
+  combined_out.P1 = eval_points.P;
+  ec_set_zero(&combined_out.P2);
   theta_chain_eval_special_case(&combined_out, &hd_isog, &combined_out, &E01);
   imPQ23x.P = use_E2 ? combined_out.P1 : combined_out.P2;
-  combined_out.P1 = eval_points.Q; ec_set_zero(&combined_out.P2);
+  combined_out.P1 = eval_points.Q;
+  ec_set_zero(&combined_out.P2);
   theta_chain_eval_special_case(&combined_out, &hd_isog, &combined_out, &E01);
   imPQ23x.Q = use_E2 ? combined_out.P1 : combined_out.P2;
-  combined_out.P1 = eval_points.PmQ; ec_set_zero(&combined_out.P2);
+  combined_out.P1 = eval_points.PmQ;
+  ec_set_zero(&combined_out.P2);
   theta_chain_eval_special_case(&combined_out, &hd_isog, &combined_out, &E01);
   imPQ23x.PmQ = use_E2 ? combined_out.P1 : combined_out.P2;
 
@@ -273,10 +310,20 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   ec_mul_ibz(&pointT, &pk->EA, &TORSION_PLUS_2POWER, &imPQ23x.PmQ);
   ec_mul_ibz(&pk->RSA.PmQ, &pk->EA, &rhs, &pointT);
 
-  ibz_finalize(&q); ibz_finalize(&alpha); ibz_finalize(&beta); ibz_finalize(&rhs);
-  ibz_finalize(&deg); ibz_finalize(&A); ibz_finalize(&two_to_a); ibz_finalize(&tempx);
-  ibz_finalize(&tempy); ibz_finalize(&three_m1_order); ibz_finalize(&remainder);
-  ibz_finalize(&inverse); ibz_finalize(&inv_3b); ibz_finalize(&inv_2a);
+  ibz_finalize(&q);
+  ibz_finalize(&alpha);
+  ibz_finalize(&beta);
+  ibz_finalize(&rhs);
+  ibz_finalize(&deg);
+  ibz_finalize(&A);
+  ibz_finalize(&two_to_a);
+  ibz_finalize(&tempx);
+  ibz_finalize(&tempy);
+  ibz_finalize(&three_m1_order);
+  ibz_finalize(&remainder);
+  ibz_finalize(&inverse);
+  ibz_finalize(&inv_3b);
+  ibz_finalize(&inv_2a);
   return 0;
 }
 
@@ -316,7 +363,8 @@ int encrypt(pokemon_ct_t *ct, const pokemon_pk_t *pk, const unsigned char *m,
 
   psi.curve = CURVE_E0;
   psi.length = TORSION_PLUS_EVEN_POWER;
-  ec_biscalar_mul_bounded(&psi.kernel, &psi.curve, one_scalar, s_scalar, (ec_basis_t *)&BASIS_EVEN, TORSION_2POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&psi.kernel, &psi.curve, one_scalar, s_scalar,
+                          (ec_basis_t *)&BASIS_EVEN, TORSION_2POWER_BYTES * 8);
 
   eval_basis_B[0] = BASIS_EVEN;
   eval_basis_B[1] = BASIS_THREE;
@@ -325,7 +373,8 @@ int encrypt(pokemon_ct_t *ct, const pokemon_pk_t *pk, const unsigned char *m,
 
   psi_prime.curve = pk->EA;
   psi_prime.length = TORSION_PLUS_EVEN_POWER;
-  ec_biscalar_mul_bounded(&psi_prime.kernel, &psi_prime.curve, one_scalar, s_scalar, &pk->PQA, TORSION_2POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&psi_prime.kernel, &psi_prime.curve, one_scalar,
+                          s_scalar, &pk->PQA, TORSION_2POWER_BYTES * 8);
 
   eval_basis_AB[0] = pk->PQA;
   eval_basis_AB[1] = pk->RSA;
@@ -335,28 +384,38 @@ int encrypt(pokemon_ct_t *ct, const pokemon_pk_t *pk, const unsigned char *m,
   ec_mul_ibz(&ct->PB, &EB, &gamma, &eval_basis_B[0].P);
   ec_mul_ibz(&ct->PAB, &EAB, &gamma, &eval_basis_AB[0].P);
 
-  digit_t d1[NWORDS_ORDER], d2[NWORDS_ORDER], d3[NWORDS_ORDER], d4[NWORDS_ORDER];
+  digit_t d1[NWORDS_ORDER], d2[NWORDS_ORDER], d3[NWORDS_ORDER],
+      d4[NWORDS_ORDER];
   ibz_to_digits(d1, &mask_xy[0][0]);
   ibz_to_digits(d2, &mask_xy[0][1]);
   ibz_to_digits(d3, &mask_xy[1][0]);
   ibz_to_digits(d4, &mask_xy[1][1]);
 
-  ec_biscalar_mul_bounded(&ct->RSB.P, &EB, d1, d2, (ec_basis_t *)&eval_basis_B[1], TORSION_3POWER_BYTES * 8);
-  ec_biscalar_mul_bounded(&ct->RSB.Q, &EB, d3, d4, (ec_basis_t *)&eval_basis_B[1], TORSION_3POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&ct->RSB.P, &EB, d1, d2,
+                          (ec_basis_t *)&eval_basis_B[1],
+                          TORSION_3POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&ct->RSB.Q, &EB, d3, d4,
+                          (ec_basis_t *)&eval_basis_B[1],
+                          TORSION_3POWER_BYTES * 8);
   xADD(&ct->RSB.PmQ, &ct->RSB.P, &ct->RSB.Q, &ct->RSB.PmQ);
 
   ec_basis_t RS_AB;
-  ec_biscalar_mul_bounded(&RS_AB.P, &EAB, d1, d2, &eval_basis_AB[1], TORSION_3POWER_BYTES * 8);
-  ec_biscalar_mul_bounded(&RS_AB.Q, &EAB, d3, d4, &eval_basis_AB[1], TORSION_3POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&RS_AB.P, &EAB, d1, d2, &eval_basis_AB[1],
+                          TORSION_3POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&RS_AB.Q, &EAB, d3, d4, &eval_basis_AB[1],
+                          TORSION_3POWER_BYTES * 8);
 
   unsigned char hash_input[4 * NWORDS_FIELD * RADIX / 8] = {0};
   unsigned char hash_output[32] = {0};
   ec_normalize_point(&RS_AB.P);
   ec_normalize_point(&RS_AB.Q);
   memcpy(hash_input, &RS_AB.P.x.re[0], NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + NWORDS_FIELD * RADIX / 8, &RS_AB.P.x.im[0], NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + 2 * NWORDS_FIELD * RADIX / 8, &RS_AB.Q.x.re[0], NWORDS_FIELD * RADIX / 8);
-  memcpy(hash_input + 3 * NWORDS_FIELD * RADIX / 8, &RS_AB.Q.x.im[0], NWORDS_FIELD * RADIX / 8);
+  memcpy(hash_input + NWORDS_FIELD * RADIX / 8, &RS_AB.P.x.im[0],
+         NWORDS_FIELD * RADIX / 8);
+  memcpy(hash_input + 2 * NWORDS_FIELD * RADIX / 8, &RS_AB.Q.x.re[0],
+         NWORDS_FIELD * RADIX / 8);
+  memcpy(hash_input + 3 * NWORDS_FIELD * RADIX / 8, &RS_AB.Q.x.im[0],
+         NWORDS_FIELD * RADIX / 8);
 
   SHAKE256(hash_output, sizeof(hash_output), hash_input, sizeof(hash_input));
   for (size_t i = 0; i < 32; i++) {
@@ -395,7 +454,8 @@ int decrypt(unsigned char *m, size_t *m_len, const pokemon_ct_t *ct,
   ec_point_t P_AB_prime;
   ec_mul_ibz(&P_AB_prime, &ct->EAB, &alpha_inv, &ct->PAB);
 
-  printf("HINT: one_point (radical dim 4 isogeny) should be implemented here\n");
+  printf(
+      "HINT: one_point (radical dim 4 isogeny) should be implemented here\n");
   ec_mul_ibz(&RS_AB1.P, &ct->EAB, &beta, &ct->RSB.P); // Placeholder
   ec_mul_ibz(&RS_AB1.Q, &ct->EAB, &beta, &ct->RSB.Q); // Placeholder
 
@@ -448,8 +508,8 @@ int check_ct(const pokemon_ct_t *ct, const pokemon_pk_t *pk,
 
   isogB.curve = CURVE_E0;
   isogB.length = TORSION_PLUS_EVEN_POWER;
-  ec_biscalar_mul_bounded(&isogB.kernel, &isogB.curve, one_scalar,
-                          s_scalar, (ec_basis_t *)&BASIS_EVEN, TORSION_2POWER_BYTES * 8);
+  ec_biscalar_mul_bounded(&isogB.kernel, &isogB.curve, one_scalar, s_scalar,
+                          (ec_basis_t *)&BASIS_EVEN, TORSION_2POWER_BYTES * 8);
 
   ec_eval_even(&EB, &isogB, NULL, 0);
 

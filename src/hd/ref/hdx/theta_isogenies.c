@@ -708,7 +708,7 @@ gluing_eval_basis(theta_point_t *image1,
  * @param T1_8 a point in A[8]
  * @param T2_8 a point in A[8]
  * @param bool1 a boolean
- * @param boo2 a boolean
+ * @param bool2 a boolean
  *
  * out : A -> B of kernel [4](T1_8,T2_8)
  * bool1 controls if the domain is in standard or dual coordinates

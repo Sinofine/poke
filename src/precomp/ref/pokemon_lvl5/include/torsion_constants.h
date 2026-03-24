@@ -1,7 +1,7 @@
 #include <intbig.h>
-#define TORSION_2POWER_BYTES 33
-#define TORSION_3POWER_BYTES 65
-#define TORSION_23POWER_BYTES 97
+#define TORSION_2POWER_BYTES 64
+#define TORSION_3POWER_BYTES 10
+#define TORSION_23POWER_BYTES 73
 extern const uint64_t TORSION_PLUS_EVEN_POWER;
 extern const uint64_t TORSION_ODD_PRIMES[1];
 extern const uint64_t TORSION_ODD_POWERS[1];

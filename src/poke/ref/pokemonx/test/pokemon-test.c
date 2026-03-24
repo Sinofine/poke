@@ -1,6 +1,7 @@
 #include "poke.h"
 #include <bench.h>
 #include <rng.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -20,16 +21,19 @@ int test_pokemon(int bench_loops) {
     keygen(&sk, &pk);
     cycles2 = cpucycles();
     cycle_runs[0] += cycles2 - cycles1;
+    printf("keygen %d\n", (int)(cycles2 - cycles1));
 
     cycles1 = cpucycles();
     encrypt(&ct, &pk, m, 32, NULL, 0);
     cycles2 = cpucycles();
     cycle_runs[1] += cycles2 - cycles1;
+    printf("encrypt %d\n", (int)(cycles2 - cycles1));
 
     cycles1 = cpucycles();
     decrypt(dec_m, &m_len, &ct, &sk);
     cycles2 = cpucycles();
     cycle_runs[2] += cycles2 - cycles1;
+    printf("decrypt %d\n", (int)(cycles2 - cycles1));
 
     for (int j = 0; j < sizeof(m); j++) {
       if (m[j] != dec_m[j])
