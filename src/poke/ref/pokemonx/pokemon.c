@@ -67,7 +67,7 @@ int ibz_random_unit(ibz_t *q, const ibz_t *modulus, shake256ctx *state) {
 
 int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   ibz_t q, alpha, beta, rhs, deg;
-  ibz_t A, two_to_a, tempx, tempy;
+  ibz_t A, two_to_a, tempx, tempy, Adiv4;
   ec_point_t pointT;
 
   ibz_init(&q);
@@ -76,6 +76,7 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   ibz_init(&rhs);
   ibz_init(&deg);
   ibz_init(&A);
+  ibz_init(&Adiv4);
   ibz_init(&two_to_a);
   ibz_init(&tempx);
   ibz_init(&tempy);
@@ -113,7 +114,8 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   }
   gmp_printf("two_to_a: %Zd, A: %Zd, q: %Zd, 3^b: %Zd\n", two_to_a, A, q, TORSION_PLUS_3POWER);
   // A = 2^2a, TORSION_PLUS_3POWER = 3^b
-  ibz_sub(&deg, &A, &q);
+  ibz_div_2exp(&Adiv4, &A, 2);
+  ibz_sub(&deg, &Adiv4, &q);
   ibz_mul(&rhs, &deg, &q);
   ibz_mul(&rhs, &rhs, &TORSION_PLUS_3POWER);
 
@@ -222,19 +224,25 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   point_print("P:", BASIS_EVEN.P);
   point_print("Q:", BASIS_EVEN.Q);
   point_print("PmQ:", BASIS_EVEN.PmQ);
-  weil(&e_P0Q0, TORSION_PLUS_EVEN_POWER, (ec_point_t *)&BASIS_EVEN.P,
-       (ec_point_t *)&BASIS_EVEN.Q, (ec_point_t *)&BASIS_EVEN.PmQ, &curve.A24);
+  // weil() normalizes (modifies) its point arguments in-place via to_cubical_i(),
+  // so we must copy from the read-only BASIS_EVEN constant into local variables.
+  // Also, cubicalDBL requires A24 to be normalized (z=1), so compute it via A24_from_AC.
+  ec_point_t basis_P = BASIS_EVEN.P;
+  ec_point_t basis_Q = BASIS_EVEN.Q;
+  ec_point_t basis_PmQ = BASIS_EVEN.PmQ;
+  ec_curve_normalize_A24(&curve);
+  weil(&e_P0Q0, TORSION_PLUS_EVEN_POWER, &basis_P, &basis_Q, &basis_PmQ, &curve.A24);
   fp2_pow_vartime(&target_pairing, &e_P0Q0, q_digits, NWORDS_ORDER);
-  weil(&e_P2Q2, TORSION_PLUS_EVEN_POWER, &B_E2.P, &B_E2.Q, &B_E2.PmQ,
-       &curve.A24);
+  ec_curve_normalize_A24(&hd_isog.codomain.E1);
+  ec_curve_normalize_A24(&hd_isog.codomain.E2);
+  weil(&e_P2Q2, TORSION_PLUS_EVEN_POWER, &B_E2.P, &B_E2.Q, &B_E2.PmQ, &hd_isog.codomain.E1.A24);
 
   int use_E2 = 0;
   if (fp2_is_equal(&e_P2Q2, &target_pairing)) {
     pk->EA = hd_isog.codomain.E1;
     use_E2 = 1;
   } else {
-    weil(&e_P3Q3, TORSION_PLUS_EVEN_POWER, &B_E3.P, &B_E3.Q, &B_E3.PmQ,
-         &curve.A24);
+    weil(&e_P3Q3, TORSION_PLUS_EVEN_POWER, &B_E3.P, &B_E3.Q, &B_E3.PmQ, &hd_isog.codomain.E2.A24);
     if (fp2_is_equal(&e_P3Q3, &target_pairing)) {
       pk->EA = hd_isog.codomain.E2;
       use_E2 = 0;
@@ -257,8 +265,10 @@ int keygen(pokemon_sk_t *sk, pokemon_pk_t *pk) {
   }
 
   jac_point_t P, Q, R, S, T;
-  lift_basis(&P, &Q, (ec_basis_t *)&BASIS_EVEN, &curve);
-  lift_basis(&R, &S, (ec_basis_t *)&BASIS_THREE, &curve);
+  ec_basis_t basis_even_copy = BASIS_EVEN;
+  ec_basis_t basis_three_copy = BASIS_THREE;
+  lift_basis(&P, &Q, &basis_even_copy, &curve);
+  lift_basis(&R, &S, &basis_three_copy, &curve);
 
   jac_point_t P23x, Q23x, PmQ23x;
   ADD(&P23x, &P, &R, &curve);
@@ -344,6 +354,7 @@ int encrypt(pokemon_ct_t *ct, const pokemon_pk_t *pk, const unsigned char *m,
   ibz_init(&s);
   ibz_init(&gamma);
   ibz_init(&A);
+  ibz_mat_2x2_init(&mask_xy);
   ibz_copy(&A, &TORSION_PLUS_2POWER);
 
   if (seed != NULL) {

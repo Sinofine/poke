@@ -1,4 +1,4 @@
-#include "poke.h"
+#include "pokemon.h"
 #include <bench.h>
 #include <rng.h>
 #include <stdio.h>
@@ -6,9 +6,9 @@
 #include <time.h>
 
 int test_pokemon(int bench_loops) {
-  poke_sk_t sk = {0};
-  poke_pk_t pk = {0};
-  poke_ct_t ct = {0};
+  pokemon_sk_t sk = {0};
+  pokemon_pk_t pk = {0};
+  pokemon_ct_t ct = {0};
   unsigned char m[32] = {0};
   unsigned char dec_m[32] = {0};
   size_t m_len = 0;
